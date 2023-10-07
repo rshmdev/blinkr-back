@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"api/api/entities"
+	"api/hooks"
 	"context"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/pborman/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type userController struct {
@@ -21,6 +23,7 @@ func NewUserController(client *mongo.Client, dbName, collectionName string) *use
 }
 
 func (p *userController) checkIfFieldExists(field, value string) (bool, error) {
+
 	filter := bson.M{field: value}
 	count, err := p.collection.CountDocuments(context.TODO(), filter)
 	return count > 0, err
@@ -53,15 +56,61 @@ func (p *userController) CreateUser(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criptografar a senha"})
+		return
+	}
+
+	user.Password = string(hashedPassword) // Substitui a senha original pela versão criptografada
+
 	user.ID = uuid.New()
 
-	_, err := p.collection.InsertOne(context.TODO(), user)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	_, insertErr := p.collection.InsertOne(context.TODO(), user)
+	if insertErr != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": insertErr.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusCreated, user)
+}
+
+func (p *userController) Login(ctx *gin.Context) {
+
+	var loginInfo entities.LoginInfo
+
+	if err := ctx.ShouldBindJSON(&loginInfo); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verificar se o usuário com o email fornecido existe no banco de dados
+	filter := bson.M{"email": loginInfo.Email}
+	existingUser := p.collection.FindOne(context.TODO(), filter)
+	if existingUser.Err() != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "Usuário não encontrado"})
+		return
+	}
+
+	var user entities.User
+	existingUser.Decode(&user)
+
+	// Verificar se a senha fornecida corresponde à senha armazenada
+	if !hooks.ComparePasswords(user.Password, []byte(loginInfo.Password)) {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Credenciais inválidas"})
+		return
+	}
+
+	// Se a autenticação for bem-sucedida, gerar um token JWT
+	token, err := hooks.GenerateJWTToken(loginInfo.Email)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao gerar token"})
+		return
+	}
+
+	// Enviar o token como resposta
+	ctx.JSON(http.StatusOK, gin.H{"token": token})
 }
 
 func (p *userController) UpdateUser(ctx *gin.Context) {

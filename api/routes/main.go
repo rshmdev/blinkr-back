@@ -31,10 +31,14 @@ func AppRoutes(router *gin.Engine) *gin.RouterGroup {
 
 		// USERS
 
-		v1.GET("/user", userController.FindAllUsers)
-		v1.POST("/user", userController.CreateUser)
-		v1.DELETE("/user/:id", userController.DeleteUser)
-		v1.PATCH("/user/:id", userController.UpdateUser)
+		v1.GET("/users", userController.FindAllUsers)
+		v1.DELETE("/users/:id", userController.DeleteUser)
+		v1.PATCH("/users/:id", userController.UpdateUser)
+
+		// Auth
+
+		v1.POST("/users/login", userController.Login)
+		v1.POST("/users/register", userController.CreateUser)
 
 	}
 
