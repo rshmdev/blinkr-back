@@ -4,6 +4,7 @@ import (
 	"api/api/entities"
 	"api/hooks"
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -110,7 +111,7 @@ func (p *userController) Login(ctx *gin.Context) {
 	}
 
 	// Enviar o token como resposta
-	ctx.JSON(http.StatusOK, gin.H{"token": token})
+	ctx.JSON(http.StatusOK, gin.H{"token": token, "userId": user.ID})
 }
 
 func (p *userController) UpdateUser(ctx *gin.Context) {
@@ -217,5 +218,52 @@ func (p *userController) DeleteUser(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "Usuario excluído com sucesso"})
+
+}
+
+func (p *userController) GetUserById(ctx *gin.Context) {
+	userID := ctx.Param("id")
+
+	if uuid.Parse(userID) == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+	filter := bson.M{"id": userID}
+
+	var user entities.User // Substitua "User" pelo tipo real do seu usuário
+
+	err := p.collection.FindOne(context.TODO(), filter).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Usuário não encontrado"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+func (p *userController) GetUserInfoById(ctx *gin.Context, id string) (*entities.User, error) {
+	userID := id
+
+	if uuid.Parse(userID) == nil {
+		return nil, fmt.Errorf("ID inválido")
+	}
+
+	filter := bson.M{"id": userID}
+
+	var user entities.User
+
+	err := p.collection.FindOne(context.TODO(), filter).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("Usuário não encontrado")
+		}
+		return nil, err
+	}
+
+	return &user, nil
 
 }

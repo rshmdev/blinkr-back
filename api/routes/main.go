@@ -2,6 +2,7 @@ package routes
 
 import (
 	controllers "api/api/controllers"
+	"api/api/websocket"
 	"context"
 	"log"
 
@@ -18,8 +19,9 @@ func AppRoutes(router *gin.Engine) *gin.RouterGroup {
 		log.Fatal(err)
 	}
 
-	postController := controllers.NewPostController(client, "Blinkr", "posts")
 	userController := controllers.NewUserController(client, "Blinkr", "users")
+	postController := controllers.NewPostController(client, "Blinkr", "posts", userController)
+	wsController := websocket.NewWebSocketController(client, "Blinkr", "messages")
 
 	v1 := router.Group("/v1")
 	{
@@ -32,6 +34,7 @@ func AppRoutes(router *gin.Engine) *gin.RouterGroup {
 		// USERS
 
 		v1.GET("/users", userController.FindAllUsers)
+		v1.GET(("users/:id"), userController.GetUserById)
 		v1.DELETE("/users/:id", userController.DeleteUser)
 		v1.PATCH("/users/:id", userController.UpdateUser)
 
@@ -39,6 +42,9 @@ func AppRoutes(router *gin.Engine) *gin.RouterGroup {
 
 		v1.POST("/users/login", userController.Login)
 		v1.POST("/users/register", userController.CreateUser)
+
+		v1.GET("/ws", wsController.WebSocketHandler)
+		v1.GET("/messages", wsController.GetMessages)
 
 	}
 

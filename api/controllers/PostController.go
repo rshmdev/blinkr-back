@@ -14,24 +14,43 @@ import (
 )
 
 type postController struct {
-	collection *mongo.Collection
+	collection     *mongo.Collection
+	userController *userController
 }
 
-func NewPostController(client *mongo.Client, dbName, collectionName string) *postController {
+func NewPostController(client *mongo.Client, dbName, collectionName string, userController *userController) *postController {
 	collection := client.Database(dbName).Collection(collectionName)
-	return &postController{collection}
+	return &postController{
+		collection:     collection,
+		userController: userController,
+	}
 }
 
 func (p *postController) CreatePost(ctx *gin.Context) {
 	var post entities.Post
 	if err := ctx.ShouldBindJSON(&post); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error tt": err.Error()})
 		return
 	}
 	post.ID = uuid.New()
 	post.PostAt = time.Now().Format("2006-01-02 15:04")
 
-	_, err := p.collection.InsertOne(context.TODO(), post)
+	// Obter informações do autor
+	user, err := p.userController.GetUserInfoById(ctx, post.Author)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if user == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "Usuário não encontrado"})
+		return
+	}
+
+	// Adicionar as informações do autor ao post
+	post.AuthorInfo = *user
+
+	_, err = p.collection.InsertOne(context.TODO(), post)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -44,7 +63,7 @@ func (p *postController) FindAll(ctx *gin.Context) {
 	cursor, err := p.collection.Find(context.TODO(), bson.M{})
 
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error aa ": err.Error()})
 		return
 	}
 	defer cursor.Close(context.TODO())
@@ -54,7 +73,7 @@ func (p *postController) FindAll(ctx *gin.Context) {
 		var post entities.Post
 		err := cursor.Decode(&post)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error aa2": err.Error()})
 			return
 		}
 		posts = append(posts, post)
